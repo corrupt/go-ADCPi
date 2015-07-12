@@ -12,9 +12,8 @@ const (
 	BUFSIZE                = 25
 	address_default        = 0xD0 //0x68 and R/W=0 (bit is "read/not write, 1 = read, 0 = write)"
 	configbyte_default     = 0x00
-	bitrate_default        = 18
 	conversionmode_default = Continuous
-	samplerate_default     = SR12
+	samplerate_default     = SR18
 	channel_default        = Ch1
 	gain_default           = X1
 )
@@ -268,7 +267,7 @@ func (i2c *I2C) WriteConfiguration() error {
 	return nil
 }
 
-func (i2c *I2C) Read() (float32, error) {
+func (i2c *I2C) Read() (int32, error) {
 	var buf []byte
 	switch i2c.samplerate {
 	case SR12, SR14, SR16:
@@ -310,9 +309,10 @@ func isBitSet(_byte byte, bit uint) (check bool) {
 	return check
 }
 
-func interpretvalue(rate Samplerate, buf []byte) (float32, error) {
+func interpretvalue(rate Samplerate, buf []byte) (int32, error) {
 	var lower, middle, upper, config byte
-	var value float32 = 0
+	var value int32 = 0
+
 	switch rate {
 	case SR12, SR14, SR16:
 		if len(buf) < 3 {
@@ -333,16 +333,28 @@ func interpretvalue(rate Samplerate, buf []byte) (float32, error) {
 	config = config
 	switch rate {
 	case SR12:
-		value = float32(((upper & 0x0F) << 8) | lower)
+		value = (int32(upper&0x0F) << 8) | int32(lower)
+		if isBitSet(upper, 3) {
+			value *= -1
+		}
 		return value, nil
 	case SR14:
-		value = float32(((upper & 0x3F) << 8) | lower)
+		value = (int32(upper&0x3F) << 8) | int32(lower)
+		if isBitSet(upper, 5) {
+			value *= -1
+		}
 		return value, nil
 	case SR16:
-		value = float32((upper << 8) | lower)
+		value = (int32(upper) << 8) | int32(lower)
+		if isBitSet(upper, 7) {
+			value *= -1
+		}
 		return value, nil
 	case SR18:
-		value = float32(((upper & 0x03) << 16) | (middle << 8) | lower)
+		value = (int32(upper&0x03) << 16) | (int32(middle) << 8) | int32(lower)
+		if isBitSet(upper, 1) {
+			value *= -1
+		}
 		return value, nil
 	}
 	return 0, errors.New("Invalid samplerate")
