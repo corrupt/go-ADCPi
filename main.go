@@ -13,7 +13,7 @@ const (
 	address_default        = 0xD0 //0x68 and R/W=0 (bit is "read/not write, 1 = read, 0 = write)"
 	configbyte_default     = 0x00
 	conversionmode_default = Continuous
-	samplerate_default     = SR18
+	samplerate_default     = SR14
 	channel_default        = Ch1
 	gain_default           = X1
 )
@@ -275,18 +275,22 @@ func (i2c *I2C) Read() (int32, error) {
 	case SR18:
 		buf = make([]byte, 4)
 	}
-	i2c.setRW(Read)
-	_, err := i2c.rc.Write([]byte{i2c.addressbyte})
-	if err != nil {
-		return 0, err
+
+	for {
+		i2c.setRW(Read)
+		_, err := i2c.rc.Write([]byte{i2c.addressbyte})
+		if err != nil {
+			return 0, err
+		}
+		_, err = i2c.rc.Read(buf)
+		if err != nil {
+			return 0, err
+		}
+		if valueUpdated(i2c.samplerate, buf) {
+			break
+		}
 	}
-	i2c.rc.Read(buf)
-	value, err := interpretvalue(i2c.samplerate, buf)
-	if err != nil {
-		return 0, err
-	} else {
-		return value, nil
-	}
+	return interpretvalue(i2c.samplerate, buf), nil
 }
 
 func ioctl(fd, cmd, arg uintptr) (err error) {
@@ -309,55 +313,59 @@ func isBitSet(_byte byte, bit uint) (check bool) {
 	return check
 }
 
-func interpretvalue(rate Samplerate, buf []byte) (int32, error) {
-	var lower, middle, upper, config byte
+func interpretvalue(rate Samplerate, buf []byte) int32 {
+	var lower, middle, upper byte
 	var value int32 = 0
 
 	switch rate {
 	case SR12, SR14, SR16:
-		if len(buf) < 3 {
-			return 0, errors.New("Invalid buffer length, must be 3")
-		}
 		upper = buf[0]
 		lower = buf[1]
-		config = buf[2]
+		//config = buf[2]
 	case SR18:
-		if len(buf) < 4 {
-			return 0, errors.New("Invalid buffer length, must be 4")
-		}
 		upper = buf[0]
 		middle = buf[1]
 		lower = buf[2]
-		config = buf[3]
+		//config = buf[3]
 	}
-	config = config
 	switch rate {
 	case SR12:
 		value = (int32(upper&0x0F) << 8) | int32(lower)
 		if isBitSet(upper, 3) {
 			value *= -1
 		}
-		return value, nil
+		return value
 	case SR14:
 		value = (int32(upper&0x3F) << 8) | int32(lower)
 		if isBitSet(upper, 5) {
 			value *= -1
 		}
-		return value, nil
+		return value
 	case SR16:
 		value = (int32(upper) << 8) | int32(lower)
 		if isBitSet(upper, 7) {
 			value *= -1
 		}
-		return value, nil
+		return value
 	case SR18:
 		value = (int32(upper&0x03) << 16) | (int32(middle) << 8) | int32(lower)
 		if isBitSet(upper, 1) {
 			value *= -1
 		}
-		return value, nil
+		return value
 	}
-	return 0, errors.New("Invalid samplerate")
+	return 0
+}
+
+func valueUpdated(rate Samplerate, buf []byte) bool {
+	var config byte
+	switch rate {
+	case SR12, SR14, SR16:
+		config = buf[2]
+	case SR18:
+		config = buf[3]
+	}
+	return !isBitSet(config, 7)
 }
 
 func main() {
