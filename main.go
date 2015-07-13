@@ -309,24 +309,28 @@ func interpretvalue(rate Samplerate, buf []byte) int32 {
 	case SR12:
 		value = (int32(upper&0x0F) << 8) | int32(lower)
 		if isBitSet(upper, 3) {
+			value &= 0x07FF //clear the sign bit
 			value *= -1
 		}
 		return value
 	case SR14:
 		value = (int32(upper&0x3F) << 8) | int32(lower)
 		if isBitSet(upper, 5) {
+			value &= 0x1FFF
 			value *= -1
 		}
 		return value
 	case SR16:
 		value = (int32(upper) << 8) | int32(lower)
 		if isBitSet(upper, 7) {
+			value &= 0x7FFF
 			value *= -1
 		}
 		return value
 	case SR18:
 		value = (int32(upper&0x03) << 16) | (int32(middle) << 8) | int32(lower)
 		if isBitSet(upper, 1) {
+			value &= 0x1FFFF
 			value *= -1
 		}
 		return value
